@@ -1,0 +1,56 @@
+// Prisma schema — this is the human-readable description of our database.
+// Run `npm run prisma:migrate:dev` after editing to apply changes locally.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// A player, identified by their wallet address (no passwords, ever).
+model User {
+  id         String    @id @default(cuid())
+  address    String    @unique // lowercase 0x… wallet address
+  clientSeed String? // optional seed the player can set for provably-fair rolls
+  createdAt  DateTime  @default(now())
+  openings   Opening[]
+}
+
+// One pack opening = one provably-fair roll that revealed one card.
+model Opening {
+  id       String @id @default(cuid())
+  user     User   @relation(fields: [userId], references: [id])
+  userId   String
+  packId   String
+  packName String
+
+  // what dropped
+  cardSym  String
+  cardName String
+  rarity   String // leg | epic | rare | com
+
+  // provably-fair proof — anyone can re-check the roll with these values
+  serverSeed     String // revealed AFTER the roll
+  serverSeedHash String // sha256(serverSeed), could be shown BEFORE the roll
+  clientSeed     String
+  nonce          Int
+  roll           Float // the resulting number in [0,1)
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
+}
+
+// Short-lived random values issued for the SIWE login handshake.
+model Nonce {
+  id        String   @id @default(cuid())
+  value     String   @unique
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
