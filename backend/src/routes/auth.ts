@@ -16,7 +16,7 @@ import { generateNonce } from 'siwe';
 import { recoverMessageAddress } from 'viem';
 import { z } from 'zod';
 import { prisma } from '../db.js';
-import { env } from '../env.js';
+import { env, normalizeDomain } from '../env.js';
 import { normalizeAddress } from '../lib/auth.js';
 
 const NONCE_TTL_MS = 10 * 60 * 1000; // a nonce is valid for 10 minutes
@@ -56,8 +56,10 @@ export default async function authRoutes(app: FastifyInstance) {
     const claimedAddress = addressMatch[1];
     const nonce = nonceMatch[1].trim();
 
-    // The message must be for OUR site, not some other app.
-    if (domain !== env.SIWE_DOMAIN) {
+    // The message must be for OUR site, not some other app. We compare after
+    // normalizing both sides (lowercase, no "www.") so the apex and www hosts —
+    // and any stray whitespace in the env var — all count as the same site.
+    if (!env.siweDomains.includes(normalizeDomain(domain))) {
       return reply.code(401).send({ error: 'bad_domain', message: 'This message was not signed for this app.' });
     }
 
