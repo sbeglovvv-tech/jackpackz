@@ -32,6 +32,13 @@ model Opening {
   cardName String
   rarity   String // leg | epic | rare | com
 
+  // RTP economics — the value the player received and what the pack funded.
+  // Defaults keep older rows valid after `prisma db push`.
+  packPrice           Float @default(0) // pack price at open time (USD)
+  payoutMult          Float @default(0) // multiplier applied to the price for this rarity
+  payoutValue         Float @default(0) // packPrice × payoutMult (USD value of the drop)
+  jackpotContribution Float @default(0) // fixed slice of the price added to the jackpot vault
+
   // provably-fair proof — anyone can re-check the roll with these values
   serverSeed     String // revealed AFTER the roll
   serverSeedHash String // sha256(serverSeed), could be shown BEFORE the roll
