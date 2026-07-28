@@ -1,9 +1,10 @@
 // Pack routes — the heart of the product.
 //
 //   GET  /api/packs           → the catalog (public)
+//   GET  /api/rtp             → published RTP model: multipliers, edge split, per-pack RTP (public)
 //   POST /api/packs/open      → open a pack, provably-fair (login required)
 //   GET  /api/feed            → recent openings across all players (public)
-//   GET  /api/verify/:id      → re-check any past opening's fairness (public)
+//   GET  /api/verify/:id      → re-check any past opening's fairness + economics (public)
 
 import { randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
@@ -18,6 +19,13 @@ import {
   getPack,
   type Rarity,
 } from '../data/catalog.js';
+import {
+  PAYOUT_MULTIPLIER,
+  computePayout,
+  computeContributions,
+  expectedRtp,
+  rtpConfig,
+} from '../data/rtp.js';
 import { computeRoll, newServerSeed, pickDrop, sha256, verifyRoll } from '../lib/provablyFair.js';
 
 const openBody = z.object({
@@ -56,8 +64,17 @@ export default async function packRoutes(app: FastifyInstance) {
           return { sym: a.sym, name: a.name, kind: a.kind, rarity: a.rarity };
         }),
         odds: packOdds(p.assets),
+        rtp: expectedRtp(p.assets), // expected return-to-player for THIS pool
       })),
       rarityLabels: RARITY_LABEL,
+    };
+  });
+
+  // ---- published RTP model (public, auditable) ----
+  app.get('/api/rtp', async () => {
+    return {
+      ...rtpConfig(),
+      packs: PACKS.map((p) => ({ id: p.id, name: p.name, price: p.price, rtp: expectedRtp(p.assets) })),
     };
   });
 
@@ -98,6 +115,11 @@ export default async function packRoutes(app: FastifyInstance) {
     const roll = computeRoll(serverSeed, clientSeed, nonce);
     const drop = pickDrop(pack, roll);
 
+    // RTP economics — value returned to the player, and fixed ecosystem contributions.
+    const rarity = drop.rarity as Rarity;
+    const { multiplier, payoutValue } = computePayout(pack.price, rarity);
+    const contributions = computeContributions(pack.price);
+
     const opening = await prisma.opening.create({
       data: {
         userId,
@@ -106,6 +128,10 @@ export default async function packRoutes(app: FastifyInstance) {
         cardSym: drop.sym,
         cardName: drop.name,
         rarity: drop.rarity,
+        packPrice: pack.price,
+        payoutMult: multiplier,
+        payoutValue,
+        jackpotContribution: contributions.jackpot,
         serverSeed,
         serverSeedHash,
         clientSeed,
@@ -125,7 +151,16 @@ export default async function packRoutes(app: FastifyInstance) {
         sym: drop.sym,
         name: drop.name,
         rarity: drop.rarity,
-        rarityLabel: RARITY_LABEL[drop.rarity as Rarity],
+        rarityLabel: RARITY_LABEL[rarity],
+        payoutMult: multiplier,
+        payoutValue,
+      },
+      // How this open settled economically (all USD).
+      economics: {
+        packPrice: pack.price,
+        payoutMult: multiplier,
+        payoutValue,
+        contributions,
       },
       // Everything needed to independently verify the roll was fair.
       proof: { serverSeed, serverSeedHash, clientSeed, nonce, roll },
@@ -147,12 +182,13 @@ export default async function packRoutes(app: FastifyInstance) {
         cardSym: o.cardSym,
         cardName: o.cardName,
         rarity: o.rarity,
+        payoutValue: o.payoutValue,
         createdAt: o.createdAt,
       })),
     };
   });
 
-  // ---- verify any past opening ----
+  // ---- verify any past opening (fairness + economics) ----
   app.get('/api/verify/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const o = await prisma.opening.findUnique({ where: { id } });
@@ -168,6 +204,14 @@ export default async function packRoutes(app: FastifyInstance) {
     return {
       valid: verifyRoll(proof),
       card: { sym: o.cardSym, name: o.cardName, rarity: o.rarity },
+      economics: {
+        packPrice: o.packPrice,
+        payoutMult: o.payoutMult,
+        payoutValue: o.payoutValue,
+        // Re-derive what the pack funded so the split is auditable from the stored price.
+        contributions: computeContributions(o.packPrice),
+        publishedMultipliers: PAYOUT_MULTIPLIER,
+      },
       proof,
       formula: 'roll = HMAC_SHA256(serverSeed, `${clientSeed}:${nonce}`) → first 13 hex ÷ 16^13',
     };

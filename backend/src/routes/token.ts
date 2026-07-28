@@ -19,17 +19,33 @@ import {
   xpForLevel,
 } from '../data/token.js';
 import { getTokenBalance } from '../lib/tokenBalance.js';
+import { EDGE_RATE, EDGE_SPLIT, RTP_TARGET } from '../data/rtp.js';
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 export default async function tokenRoutes(app: FastifyInstance) {
   // ---- Public marketing/stats endpoint (no login) ----
   app.get('/api/token/stats', async () => {
-    const totalOpenings = await prisma.opening.count();
-    // LAUNCH-DAY TODO: read burned supply and vault balances on-chain.
+    // Aggregate the running economy from stored openings.
+    const agg = await prisma.opening.aggregate({
+      _count: true,
+      _sum: { jackpotContribution: true, packPrice: true, payoutValue: true },
+    });
+    const totalOpenings = agg._count;
+    const turnover = agg._sum.packPrice ?? 0;
+    const globalJackpot = round2(agg._sum.jackpotContribution ?? 0);
+    const paidOut = round2(agg._sum.payoutValue ?? 0);
+    // Ecosystem sinks accrued from turnover (USD value; becomes on-chain once the token is live).
+    const burnedUsd = round2(turnover * EDGE_RATE * EDGE_SPLIT.burn);
+    const packRewardsVault = round2(turnover * EDGE_RATE * EDGE_SPLIT.liquidity);
     return {
       tokenLive: false,
-      burned: 0, // $JACKZ burned to date
-      packRewardsVault: 0, // USDG
-      globalJackpot: 0, // USDG
+      rtpTarget: RTP_TARGET,
+      turnover: round2(turnover),
+      paidOut,
+      burnedUsd, // $ value routed to $JACKZ buyback & burn (real token burns once live)
+      packRewardsVault, // USDG liquidity that funds asset payouts
+      globalJackpot, // USDG
       tiers: TIERS,
       xpPerPack: XP_PER_PACK,
       totalOpenings,
