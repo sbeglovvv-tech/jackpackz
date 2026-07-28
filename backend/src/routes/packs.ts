@@ -10,6 +10,7 @@ import { randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../db.js';
+import { env } from '../env.js';
 import { requireAuth } from '../lib/auth.js';
 import {
   ASSETS,
@@ -186,6 +187,18 @@ export default async function packRoutes(app: FastifyInstance) {
         createdAt: o.createdAt,
       })),
     };
+  });
+
+  // ---- admin: wipe all openings (clears the live feed + jackpot; demo reset) ----
+  // Disabled unless ADMIN_KEY is set. Call with header `x-admin-key: <ADMIN_KEY>`.
+  app.post('/api/admin/reset-openings', async (request, reply) => {
+    if (!env.ADMIN_KEY) return reply.code(404).send({ error: 'not_found', message: 'Not enabled.' });
+    if (request.headers['x-admin-key'] !== env.ADMIN_KEY) {
+      return reply.code(401).send({ error: 'unauthorized', message: 'Bad admin key.' });
+    }
+    const del = await prisma.opening.deleteMany({});
+    // nonce is derived from the opening count, so it resets automatically to 0.
+    return { ok: true, deletedOpenings: del.count };
   });
 
   // ---- verify any past opening (fairness + economics) ----
