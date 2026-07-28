@@ -14,6 +14,9 @@ const schema = z.object({
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
   // Railway injects PORT automatically; default to 8080 for local dev.
   PORT: z.coerce.number().default(8080),
+  // Optional — set to enable the admin reset endpoint (POST /api/admin/reset-openings).
+  // Leave unset in normal operation; the endpoint 404s when this is missing.
+  ADMIN_KEY: z.string().optional(),
   // Optional — set on token launch day to enable on-chain $JACKZ balance/tier reads.
   TOKEN_ADDRESS: z.string().optional(),
   RPC_URL: z.string().optional(),
