@@ -28,10 +28,12 @@ import {
   rtpConfig,
 } from '../data/rtp.js';
 import { computeRoll, newServerSeed, pickDrop, sha256, verifyRoll } from '../lib/provablyFair.js';
+import { paymentEnabled, paymentConfig, verifyPayment } from '../lib/payment.js';
 
 const openBody = z.object({
   packId: z.string().min(1),
   clientSeed: z.string().trim().min(1).max(100).optional(),
+  txHash: z.string().optional(), // USDG payment tx (required when payments are enabled)
 });
 
 function shortAddr(a: string): string {
@@ -79,6 +81,11 @@ export default async function packRoutes(app: FastifyInstance) {
     };
   });
 
+  // ---- payment config for the front-end (public) ----
+  app.get('/api/pay/config', async () => {
+    return paymentConfig();
+  });
+
   // ---- open a pack (login required) ----
   app.post('/api/packs/open', { preHandler: requireAuth }, async (request, reply) => {
     const parsed = openBody.safeParse(request.body);
@@ -93,6 +100,28 @@ export default async function packRoutes(app: FastifyInstance) {
     }
 
     const userId = request.user.sub;
+
+    // ---- Real USDG payment gate (only when USDG_ADDRESS + TREASURY_ADDRESS are set) ----
+    let paymentTx: string | null = null;
+    if (paymentEnabled()) {
+      const txHash = parsed.data.txHash?.trim();
+      if (!txHash) {
+        return reply.code(402).send({ error: 'payment_required', message: 'A USDG payment is required to open this pack.' });
+      }
+      paymentTx = txHash.toLowerCase();
+      // Prevent re-using one payment for many opens.
+      const seen = await prisma.opening.findFirst({ where: { paymentTx } });
+      if (seen) {
+        return reply.code(409).send({ error: 'tx_used', message: 'This payment has already been used.' });
+      }
+      const check = await verifyPayment(txHash, request.user.address, pack.price);
+      if (!check.ok) {
+        return reply.code(402).send({
+          error: 'payment_unverified',
+          message: `Couldn't verify your USDG payment (${check.reason}). If the transaction just went through, wait a few seconds and try again.`,
+        });
+      }
+    }
 
     // Decide the client seed: use the one sent, else the player's saved seed,
     // else generate one and remember it for next time.
@@ -133,6 +162,7 @@ export default async function packRoutes(app: FastifyInstance) {
         payoutMult: multiplier,
         payoutValue,
         jackpotContribution: contributions.jackpot,
+        paymentTx,
         serverSeed,
         serverSeedHash,
         clientSeed,
