@@ -47,6 +47,10 @@ const schema = z.object({
   UNIVERSAL_ROUTER: z.string().default('0x8876789976decbfcbbbe364623c63652db8c0904'),
   V4_QUOTER: z.string().default('0x8dc178efb8111bb0973dd9d722ebeff267c98f94'),
   PERMIT2_ADDRESS: z.string().default('0x000000000022D473030F116dDEE9F6B43aC78BA3'),
+  //   Uniswap v3 on Robinhood Chain — used first for delivery (deep USDG pools live on v3).
+  //   SwapRouter02 sends the swapped token straight to the player; plain ERC-20 approve, no Permit2.
+  V3_SWAP_ROUTER: z.string().default('0xcaf681a66d020601342297493863e78c959e5cb2'),
+  V3_QUOTER: z.string().default('0x33e885ed0ec9bf04ecfb19341582aadcb4c8a9e7'),
 });
 
 const parsed = schema.safeParse(process.env);
