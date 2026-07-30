@@ -20,6 +20,12 @@ const schema = z.object({
   // Optional — set on token launch day to enable on-chain $JACKZ balance/tier reads.
   TOKEN_ADDRESS: z.string().optional(),
   RPC_URL: z.string().optional(),
+  // Real USDG payments. Set BOTH to require & verify an on-chain USDG payment before
+  // every pack open. Leave unset to keep the free (demo) opening flow.
+  //   USDG_ADDRESS     — the USDG token contract on Robinhood Chain
+  //   TREASURY_ADDRESS — the wallet that receives pack payments
+  USDG_ADDRESS: z.string().optional(),
+  TREASURY_ADDRESS: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);
