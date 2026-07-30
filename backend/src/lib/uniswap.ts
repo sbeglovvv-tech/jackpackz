@@ -48,7 +48,7 @@ function loadAccount() {
 export const operatorAccount = loadAccount();
 export const operatorAddress: Address | null = operatorAccount ? operatorAccount.address : null;
 
-const walletClient = operatorAccount
+export const walletClient = operatorAccount
   ? createWalletClient({ account: operatorAccount, chain: robinhood, transport: http(RPC) })
   : null;
 

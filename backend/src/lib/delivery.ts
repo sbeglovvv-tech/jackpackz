@@ -19,6 +19,7 @@ import {
   swapUsdgForToken,
   transferToken,
 } from './uniswap.js';
+import { quoteV3, swapV3ToRecipient } from './uniswapV3.js';
 
 export type DeliveryStatus = 'none' | 'skipped' | 'sent' | 'failed';
 export type DeliveryResult = {
@@ -56,18 +57,22 @@ export async function deliverDrop(args: {
   try {
     const decimals = await usdgDecimals();
     const amountIn = parseUnits(payoutValue.toFixed(decimals), decimals);
-
-    // Liquidity gate: no live USDG pool for this token -> don't attempt a swap.
-    const quote = await quoteUsdgIn(token, amountIn);
-    if (!quote) return { status: 'skipped', reason: 'no_liquidity' };
-
-    // Slippage-protected minimum output.
     const bps = BigInt(10_000 - env.DELIVERY_SLIPPAGE_BPS);
-    const minOut = (quote.amountOut * bps) / 10_000n;
 
-    // 1) Swap USDG -> token (lands in the operator wallet).
+    // ---- Route 1: Uniswap v3 (primary — deep USDG pools; output goes straight to player) ----
+    const q3 = await quoteV3(token, amountIn);
+    if (q3) {
+      const minOut = (q3.amountOut * bps) / 10_000n;
+      const r = await swapV3ToRecipient(token, amountIn, minOut, q3.fee, recipient);
+      return { status: 'sent', token, amount: r.delivered.toString(), transferTx: r.tx };
+    }
+
+    // ---- Route 2: Uniswap v4 fallback (swap to operator, then forward to player) ----
+    const q4 = await quoteUsdgIn(token, amountIn);
+    if (!q4) return { status: 'skipped', reason: 'no_liquidity' }; // liquidity gate
+
+    const minOut = (q4.amountOut * bps) / 10_000n;
     const swap = await swapUsdgForToken(token, amountIn, minOut);
-    // 2) Forward the exact received amount to the player.
     const transferTx = await transferToken(token, recipient, swap.received);
 
     return {
