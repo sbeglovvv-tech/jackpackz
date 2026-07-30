@@ -23,9 +23,30 @@ const schema = z.object({
   // Real USDG payments. Set BOTH to require & verify an on-chain USDG payment before
   // every pack open. Leave unset to keep the free (demo) opening flow.
   //   USDG_ADDRESS     — the USDG token contract on Robinhood Chain
-  //   TREASURY_ADDRESS — the wallet that receives pack payments
+  //   TREASURY_ADDRESS — the wallet that receives pack payments (== the operator wallet)
   USDG_ADDRESS: z.string().optional(),
   TREASURY_ADDRESS: z.string().optional(),
+
+  // ---------------------------------------------------------------------------
+  // Option A — real on-chain token delivery (operator swap). ALL OPTIONAL.
+  // When OPERATOR_PRIVATE_KEY is unset the whole delivery layer is a no-op and packs
+  // settle exactly like today (provably-fair result + recorded USD value, no transfer).
+  // ---------------------------------------------------------------------------
+  //   OPERATOR_PRIVATE_KEY — hot wallet that pays out drops. SET THIS ON RAILWAY ONLY,
+  //     never anywhere it can leak. Its public address should equal TREASURY_ADDRESS so
+  //     the same wallet both receives payments and funds the swaps (self-funding house).
+  OPERATOR_PRIVATE_KEY: z.string().optional(),
+  //   DELIVERY_TOKENS — JSON map of asset symbol -> ERC-20 address on Robinhood Chain,
+  //     e.g. {"NVDA":"0x…","VLAD":"0x…"}. Only symbols listed here can be delivered on
+  //     chain; anything else settles as before. Never hardcode addresses in code.
+  DELIVERY_TOKENS: z.string().optional(),
+  //   DELIVERY_SLIPPAGE_BPS — max slippage for a payout swap, in basis points (300 = 3%).
+  DELIVERY_SLIPPAGE_BPS: z.coerce.number().min(0).max(5000).default(300),
+  //   Uniswap v4 infrastructure on Robinhood Chain. Defaults below are the public
+  //     deployment; override only if Uniswap redeploys.
+  UNIVERSAL_ROUTER: z.string().default('0x8876789976decbfcbbbe364623c63652db8c0904'),
+  V4_QUOTER: z.string().default('0x8dc178efb8111bb0973dd9d722ebeff267c98f94'),
+  PERMIT2_ADDRESS: z.string().default('0x000000000022D473030F116dDEE9F6B43aC78BA3'),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -42,6 +63,25 @@ export function normalizeDomain(host: string): string {
   return host.trim().toLowerCase().replace(/^www\./, '');
 }
 
+// Parse DELIVERY_TOKENS (JSON) into a clean { SYM: address } record. Bad JSON -> {} + warn,
+// so a typo disables delivery instead of crashing the whole server.
+function parseDeliveryTokens(raw?: string): Record<string, string> {
+  if (!raw || !raw.trim()) return {};
+  try {
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    const out: Record<string, string> = {};
+    for (const [sym, addr] of Object.entries(obj)) {
+      if (typeof addr === 'string' && /^0x[0-9a-fA-F]{40}$/.test(addr.trim())) {
+        out[sym.toUpperCase()] = addr.trim();
+      }
+    }
+    return out;
+  } catch {
+    console.warn('⚠️  DELIVERY_TOKENS is not valid JSON — on-chain delivery disabled for all assets.');
+    return {};
+  }
+}
+
 export const env = {
   ...parsed.data,
   // Turn the comma-separated CORS string into an array of clean origins.
@@ -52,4 +92,6 @@ export const env = {
   siweDomains: parsed.data.SIWE_DOMAIN.split(',')
     .map((s) => normalizeDomain(s))
     .filter(Boolean),
+  // Symbol -> ERC-20 address for on-chain delivery (empty = delivery off).
+  deliveryTokens: parseDeliveryTokens(parsed.data.DELIVERY_TOKENS),
 };
