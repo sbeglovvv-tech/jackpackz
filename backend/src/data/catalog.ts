@@ -48,18 +48,12 @@ export const ASSETS: Record<string, Asset> = {
   PG: { sym: 'PG', name: 'Procter & Gamble', kind: 'stock', rarity: 'com' },
   JNJ: { sym: 'JNJ', name: 'Johnson & Johnson', kind: 'stock', rarity: 'com' },
   PEP: { sym: 'PEP', name: 'PepsiCo', kind: 'stock', rarity: 'com' },
-  // ---- memes ----
-  VLAD: { sym: 'VLAD', name: 'Robinhood Man', kind: 'meme', rarity: 'leg' },
-  WSB: { sym: 'WSB', name: 'wallstreetbets', kind: 'meme', rarity: 'epic' },
-  ROCKET: { sym: 'ROCKET', name: 'Robinhood Raccoon', kind: 'meme', rarity: 'rare' },
+  // ---- memes (real, liquidity-verified Robinhood Chain tokens) ----
+  VLAD: { sym: 'VLAD', name: 'The Robinhood', kind: 'meme', rarity: 'leg' },
+  WALLET: { sym: 'WALLET', name: 'Robinhood Wallet', kind: 'meme', rarity: 'epic' },
+  REPE: { sym: 'REPE', name: 'Robinhood Pepe', kind: 'meme', rarity: 'rare' },
   CASHCAT: { sym: 'CASHCAT', name: 'Cash Cat', kind: 'meme', rarity: 'com' },
-  WOJAK: { sym: 'WOJAK', name: 'Wojak', kind: 'meme', rarity: 'com' },
-  TENDIES: { sym: 'TENDIES', name: 'Tendies', kind: 'meme', rarity: 'com' },
-  HYP: { sym: 'HYP', name: 'Hyperium', kind: 'meme', rarity: 'com' },
-  RWA: { sym: 'RWA', name: 'Real World Asset', kind: 'meme', rarity: 'com' },
-  STONKS: { sym: 'STONKS', name: 'Stonks', kind: 'meme', rarity: 'com' },
-  FOX: { sym: 'FOX', name: 'Robin Hood', kind: 'meme', rarity: 'com' },
-  HOODRAT: { sym: 'HOODRAT', name: 'Hoodrat', kind: 'meme', rarity: 'com' },
+  BRODIE: { sym: 'BRODIE', name: 'Robinhood Dog', kind: 'meme', rarity: 'com' },
 };
 
 export type Pack = {
@@ -79,7 +73,7 @@ export const PACKS: Pack[] = [
     name: 'AI Pack',
     price: 9.99,
     blurb: 'The chips & agents building machine intelligence.',
-    assets: ['NVDA', 'AMD', 'HYP'],
+    assets: ['NVDA', 'AMD', 'MU'],
     count: '3 assets inside',
   },
   {
@@ -92,10 +86,10 @@ export const PACKS: Pack[] = [
   },
   {
     id: 'meme',
-    name: 'Meme Moonshot',
+    name: "CashCat's Meme Fortune",
     price: 12.99,
     blurb: 'Pure degen. Robinhood-chain memes, max variance.',
-    assets: ['WSB', 'VLAD', 'ROCKET', 'CASHCAT', 'WOJAK'],
+    assets: ['VLAD', 'WALLET', 'REPE', 'CASHCAT', 'BRODIE'],
     count: '5 memes inside',
   },
   {
@@ -148,7 +142,7 @@ export const COLLECTIONS: Collection[] = [
   {
     id: 'memes',
     name: 'Meme Legends',
-    set: ['WSB', 'VLAD', 'ROCKET', 'CASHCAT', 'WOJAK'],
+    set: ['VLAD', 'WALLET', 'REPE', 'CASHCAT', 'BRODIE'],
     bonus: '+$6',
   },
 ];
