@@ -93,6 +93,28 @@ export async function verifyPayment(txHash: string, buyer: string, priceUsd: num
   return { ok: false, reason: 'no_matching_transfer' };
 }
 
+// Reliable server-side USDG balance read (used by the "Not enough USDG" panel).
+// Reading via our own RPC avoids wallet-provider eth_call quirks on the client.
+const BALANCE_ABI = [
+  { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] },
+] as const;
+
+export async function usdgBalanceOf(addr: string): Promise<{ raw: string; decimals: number } | null> {
+  if (!paymentEnabled()) return null;
+  try {
+    const decimals = await usdgDecimals();
+    const raw = await client.readContract({
+      address: getAddress(env.USDG_ADDRESS!),
+      abi: BALANCE_ABI,
+      functionName: 'balanceOf',
+      args: [getAddress(addr)],
+    });
+    return { raw: (raw as bigint).toString(), decimals };
+  } catch {
+    return null;
+  }
+}
+
 // Public config the front-end needs to build the payment transaction.
 export async function paymentConfig() {
   const live = paymentEnabled();
