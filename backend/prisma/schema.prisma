@@ -42,6 +42,13 @@ model Opening {
   // On-chain USDG payment that funded this open (null in demo/free mode). Unique = no replay.
   paymentTx String? @unique
 
+  // On-chain payout delivery (Option A). none = delivery off; skipped = no pool/token;
+  // sent = token delivered; failed = swap/transfer errored (retryable, open still valid).
+  deliveryStatus String? @default("none")
+  deliveryTx     String? // the ERC-20 transfer tx that sent the token to the player
+  deliveredToken String? // ERC-20 address that was delivered
+  deliveredAmt   String? // token base units delivered (string; tokens can exceed 2^53)
+
   // provably-fair proof — anyone can re-check the roll with these values
   serverSeed     String // revealed AFTER the roll
   serverSeedHash String // sha256(serverSeed), could be shown BEFORE the roll
