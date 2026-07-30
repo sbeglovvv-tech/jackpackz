@@ -14,6 +14,7 @@
 import { formatUnits, parseUnits } from 'viem';
 import { env } from '../src/env.js';
 import { quoteUsdgIn, usdgDecimals } from '../src/lib/uniswap.js';
+import { quoteV3 } from '../src/lib/uniswapV3.js';
 
 async function main() {
   if (!env.USDG_ADDRESS) {
@@ -38,12 +39,18 @@ async function main() {
 
   for (const [sym, addr] of entries) {
     try {
-      const q = await quoteUsdgIn(addr, sample);
-      if (!q) {
-        console.log(`  ❌ ${sym.padEnd(10)} ${addr}  — no live USDG pool found`);
+      const v3 = await quoteV3(addr, sample); // primary route
+      if (v3) {
+        const out = formatUnits(v3.amountOut, 18);
+        console.log(`  ✅ ${sym.padEnd(10)} ${addr}  — v3 pool fee ${v3.fee}, 10 USDG ≈ ${out} tokens`);
+        continue;
+      }
+      const v4 = await quoteUsdgIn(addr, sample); // fallback route
+      if (v4) {
+        const out = formatUnits(v4.amountOut, 18);
+        console.log(`  ✅ ${sym.padEnd(10)} ${addr}  — v4 pool fee ${v4.fee}, 10 USDG ≈ ${out} tokens`);
       } else {
-        const out = formatUnits(q.amountOut, 18); // display only; real decimals vary per token
-        console.log(`  ✅ ${sym.padEnd(10)} ${addr}  — pool fee ${q.fee} (tickSpacing ${q.tickSpacing}), 10 USDG ≈ ${out} tokens`);
+        console.log(`  ❌ ${sym.padEnd(10)} ${addr}  — no live USDG pool (v3 or v4)`);
       }
     } catch (e) {
       console.log(`  ⚠️  ${sym.padEnd(10)} ${addr}  — probe error: ${e instanceof Error ? e.message : e}`);

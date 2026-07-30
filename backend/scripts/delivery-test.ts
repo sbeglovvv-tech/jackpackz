@@ -20,6 +20,7 @@ import {
   swapUsdgForToken,
   transferToken,
 } from '../src/lib/uniswap.js';
+import { quoteV3, swapV3ToRecipient } from '../src/lib/uniswapV3.js';
 
 async function main() {
   const [token, amountStr, recipient] = process.argv.slice(2);
@@ -52,14 +53,27 @@ async function main() {
   console.log(`Recipient: ${recipient}`);
   console.log(`Amount in: ${amount} USDG\n`);
 
-  console.log('1) Quoting pool…');
-  const q = await quoteUsdgIn(token, amountIn);
-  if (!q) { console.error('   No live USDG pool for this token. Aborting.'); process.exit(1); }
   const bps = BigInt(10_000 - env.DELIVERY_SLIPPAGE_BPS);
-  const minOut = (q.amountOut * bps) / 10_000n;
-  console.log(`   fee ${q.fee}, expected out ≈ ${q.amountOut}, minOut (after ${env.DELIVERY_SLIPPAGE_BPS}bps) = ${minOut}\n`);
 
-  console.log('2) Swapping USDG -> token (into operator wallet)…');
+  console.log('1) Quoting pool (v3 first, then v4)…');
+  const q3 = await quoteV3(token, amountIn);
+  if (q3) {
+    const minOut = (q3.amountOut * bps) / 10_000n;
+    console.log(`   v3 fee ${q3.fee}, expected out ≈ ${q3.amountOut}, minOut (after ${env.DELIVERY_SLIPPAGE_BPS}bps) = ${minOut}\n`);
+    console.log('2) v3 swap USDG -> token, straight to recipient…');
+    const r = await swapV3ToRecipient(token, amountIn, minOut, q3.fee, recipient);
+    console.log(`   tx:        ${r.tx}`);
+    console.log(`   delivered: ${r.delivered} base units (${formatUnits(r.delivered, 18)} @18dp display)\n`);
+    console.log('✅ Done (v3). Check the recipient wallet + tx on the explorer.');
+    return;
+  }
+
+  const q4 = await quoteUsdgIn(token, amountIn);
+  if (!q4) { console.error('   No live USDG pool (v3 or v4) for this token. Aborting.'); process.exit(1); }
+  const minOut = (q4.amountOut * bps) / 10_000n;
+  console.log(`   v4 fee ${q4.fee}, expected out ≈ ${q4.amountOut}, minOut (after ${env.DELIVERY_SLIPPAGE_BPS}bps) = ${minOut}\n`);
+
+  console.log('2) v4 swap USDG -> token (into operator wallet)…');
   const swap = await swapUsdgForToken(token, amountIn, minOut);
   console.log(`   swapTx:   ${swap.swapTx}`);
   console.log(`   received: ${swap.received} base units (${formatUnits(swap.received, 18)} @18dp display)\n`);
@@ -68,7 +82,7 @@ async function main() {
   const transferTx = await transferToken(token, recipient, swap.received);
   console.log(`   transferTx: ${transferTx}\n`);
 
-  console.log('✅ Done. Check the recipient wallet + both txs on the explorer.');
+  console.log('✅ Done (v4). Check the recipient wallet + both txs on the explorer.');
 }
 
 main().catch((e) => {
