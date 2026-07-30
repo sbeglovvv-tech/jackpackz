@@ -28,7 +28,7 @@ import {
   rtpConfig,
 } from '../data/rtp.js';
 import { computeRoll, newServerSeed, pickDrop, sha256, verifyRoll } from '../lib/provablyFair.js';
-import { paymentEnabled, paymentConfig, verifyPayment } from '../lib/payment.js';
+import { paymentEnabled, paymentConfig, verifyPayment, usdgBalanceOf } from '../lib/payment.js';
 import { deliveryEnabled, deliverDrop } from '../lib/delivery.js';
 
 const openBody = z.object({
@@ -85,6 +85,14 @@ export default async function packRoutes(app: FastifyInstance) {
   // ---- payment config for the front-end (public) ----
   app.get('/api/pay/config', async () => {
     return paymentConfig();
+  });
+
+  // ---- USDG balance of the logged-in player (drives the "Not enough USDG" panel) ----
+  // Read server-side via our own RPC, so it doesn't depend on the wallet's eth_call.
+  app.get('/api/pay/balance', { preHandler: requireAuth }, async (request) => {
+    const bal = await usdgBalanceOf(request.user.address);
+    if (!bal) return { live: paymentEnabled(), balance: null, decimals: null };
+    return { live: true, balance: bal.raw, decimals: bal.decimals };
   });
 
   // ---- open a pack (login required) ----
