@@ -29,6 +29,7 @@ import {
 } from '../data/rtp.js';
 import { computeRoll, newServerSeed, pickDrop, sha256, verifyRoll } from '../lib/provablyFair.js';
 import { paymentEnabled, paymentConfig, verifyPayment } from '../lib/payment.js';
+import { deliveryEnabled, deliverDrop } from '../lib/delivery.js';
 
 const openBody = z.object({
   packId: z.string().min(1),
@@ -171,6 +172,37 @@ export default async function packRoutes(app: FastifyInstance) {
       },
     });
 
+    // ---- On-chain payout delivery (Option A). Best-effort; never breaks the open. ----
+    // Only for real paid opens (paymentTx present). deliverDrop() never throws.
+    let delivery: { status: string; tx: string | null; token: string | null; amount: string | null } = {
+      status: 'none',
+      tx: null,
+      token: null,
+      amount: null,
+    };
+    if (deliveryEnabled() && paymentTx) {
+      const d = await deliverDrop({ sym: drop.sym, payoutValue, recipient: request.user.address });
+      delivery = {
+        status: d.status,
+        tx: d.transferTx ?? d.swapTx ?? null,
+        token: d.token ?? null,
+        amount: d.amount ?? null,
+      };
+      try {
+        await prisma.opening.update({
+          where: { id: opening.id },
+          data: {
+            deliveryStatus: d.status,
+            deliveryTx: d.transferTx ?? null,
+            deliveredToken: d.token ?? null,
+            deliveredAmt: d.amount ?? null,
+          },
+        });
+      } catch {
+        /* recording delivery status is non-critical — the open already succeeded */
+      }
+    }
+
     return {
       opening: {
         id: opening.id,
@@ -178,6 +210,8 @@ export default async function packRoutes(app: FastifyInstance) {
         packName: pack.name,
         createdAt: opening.createdAt,
       },
+      // How the real token payout settled on chain (status "none" when delivery is off).
+      delivery,
       card: {
         sym: drop.sym,
         name: drop.name,
