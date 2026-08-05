@@ -95,6 +95,18 @@ export default async function packRoutes(app: FastifyInstance) {
     return { live: true, balance: bal.raw, decimals: bal.decimals };
   });
 
+  // ---- live jackpot total (public): sum of the jackpot slice across REAL paid opens ----
+  // Demo/free opens (no paymentTx) don't count — the vault only reflects real money in.
+  app.get('/api/jackpot', async () => {
+    const where = { paymentTx: { not: null } };
+    const [agg, opens] = await Promise.all([
+      prisma.opening.aggregate({ _sum: { jackpotContribution: true }, where }),
+      prisma.opening.count({ where }),
+    ]);
+    const total = agg._sum.jackpotContribution ?? 0;
+    return { jackpot: Math.round(total * 100) / 100, opens };
+  });
+
   // ---- open a pack (login required) ----
   app.post('/api/packs/open', { preHandler: requireAuth }, async (request, reply) => {
     const parsed = openBody.safeParse(request.body);
